@@ -76,15 +76,9 @@ func (s *UserService) GetDetail(c *fiber.Ctx) error {
 
 	return c.JSON(user)
 }
-// Catatan: Anda perlu menambahkan method Create, Update, Delete, dan AssignRole di sini.
-
-// Tambahkan ini ke user_service.go (dengan GetDetail yang sudah ada)
 
 func (s *UserService) Update(c *fiber.Ctx) error {
 	return c.Status(501).JSON(fiber.Map{"message": "User Update (Admin) not implemented"})
-}
-func (s *UserService) Delete(c *fiber.Ctx) error {
-	return c.Status(501).JSON(fiber.Map{"message": "User Delete (Admin) not implemented"})
 }
 
 func (s *UserService) AssignRole(c *fiber.Ctx) error {
@@ -109,4 +103,24 @@ func (s *UserService) AssignRole(c *fiber.Ctx) error {
     }
 
     return c.Status(fiber.StatusOK).JSON(fiber.Map{"message": "User role assigned successfully"})
+}
+
+// Delete (DELETE /api/v1/users/:id) - Melakukan Soft Delete
+func (s *UserService) Delete(c *fiber.Ctx) error {
+    userID := c.Params("id") // Ambil ID dari parameter URL
+
+    // 1. Panggil Repository untuk melakukan Soft Delete
+    if err := s.repo.SoftDelete(userID); err != nil {
+        
+        // 2. Tangani error spesifik jika user tidak ditemukan/sudah dihapus
+        if err.Error() == "user not found or already deleted" {
+             return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "User not found or already deleted"})
+        }
+        
+        // 3. Tangani error database umum
+        return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to delete user"})
+    }
+
+    // 4. Kembalikan status sukses
+    return c.Status(fiber.StatusOK).JSON(fiber.Map{"message": "User deleted successfully (soft delete)"})
 }

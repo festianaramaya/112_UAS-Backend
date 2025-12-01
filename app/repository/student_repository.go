@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"uas/app/model"
+	"errors"
 )
 
 type StudentRepository struct {
@@ -14,70 +15,126 @@ func NewStudentRepository(db *sql.DB) *StudentRepository {
 	return &StudentRepository{DB: db}
 }
 
+// ----------------------------------------------------------------------------------
+// UTILITY SCANNER: Fungsi untuk men-scan baris SELECT ke model.Student (tanpa updated_at)
+// ----------------------------------------------------------------------------------
+
+func scanStudent(row *sql.Row, s *model.Student) error {
+	// Variabel penampung untuk field yang bisa NULL
+	var nullAdvisorID sql.NullString
+	
+	// Scan 7 kolom
+	err := row.Scan(
+		&s.ID, &s.UserID, &s.StudentID, &s.ProgramStudy, &s.AcademicYear, 
+		&nullAdvisorID, // Scan ke sql.NullString (untuk advisor_id)
+		&s.CreatedAt, 
+		// Hapus &nullUpdatedAt
+	)
+
+	if err != nil {
+		return err
+	}
+	
+	// Konversi nilai Nullable kembali ke struct Student
+	s.AdvisorID = nullAdvisorID
+	// Hapus s.UpdatedAt
+
+	return nil
+}
+
+func scanStudents(rows *sql.Rows, students *[]model.Student) error {
+	for rows.Next() {
+		var s model.Student
+		var nullAdvisorID sql.NullString
+		// Hapus var nullUpdatedAt
+
+		if err := rows.Scan(
+			&s.ID, &s.UserID, &s.StudentID, &s.ProgramStudy, &s.AcademicYear, 
+			&nullAdvisorID, // Scan ke sql.NullString
+			&s.CreatedAt, 
+			// Hapus &nullUpdatedAt
+		); err != nil {
+			return err
+		}
+
+		// Konversi Nullable ke struct Student
+		s.AdvisorID = nullAdvisorID
+		// Hapus s.UpdatedAt
+		
+		*students = append(*students, s)
+	}
+
+	return rows.Err()
+}
+
+
+// ----------------------------------------------------------------------------------
+// Implementasi Methods
+// ----------------------------------------------------------------------------------
+
 // GetStudentByID - Mengambil detail mahasiswa berdasarkan ID UUID
 func (r *StudentRepository) GetStudentByID(ctx context.Context, id string) (*model.Student, error) {
+	// FIX: Hapus updated_at dari SELECT
 	query := `
-		SELECT id, user_id, student_id, program_study, academic_year, advisor_id, created_at, updated_at
+		SELECT id, user_id, student_id, program_study, academic_year, advisor_id, created_at
 		FROM students
 		WHERE id = $1
 	`
 	row := r.DB.QueryRowContext(ctx, query, id)
 
 	var s model.Student
-    // Penangkapan error dari Scan
-	err := row.Scan(
-		&s.ID,
-		&s.UserID,
-		&s.StudentID,
-		&s.ProgramStudy,
-		&s.AcademicYear,
-		&s.AdvisorID,
-		&s.CreatedAt,
-        &s.UpdatedAt, 
-	)
-
-	// Pengecekan error setelah Scan
-	if err != nil {
+	if err := scanStudent(row, &s); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, errors.New("student not found")
+		}
 		return nil, err
 	}
-
 	return &s, nil
 }
 
 // Create - Membuat data mahasiswa baru
 func (r *StudentRepository) Create(ctx context.Context, s *model.Student) error {
-	// Query tidak menyertakan 'id' karena DB yang generate. Menggunakan RETURNING untuk mendapatkan ID baru.
+	// FIX: Hapus updated_at dari RETURNING
 	query := `
 		INSERT INTO students (user_id, student_id, program_study, academic_year, advisor_id)
 		VALUES ($1, $2, $3, $4, $5)
-        RETURNING id, created_at, updated_at
+		RETURNING id, created_at
 	`
+	// Siapkan nilai AdvisorID untuk INSERT. Jika NULLABLE, gunakan Valuenya.
+	advisorIDValue := s.AdvisorID.String
+	if !s.AdvisorID.Valid {
+		advisorIDValue = "" 
+	}
+
 
 	row := r.DB.QueryRowContext(ctx, query,
 		s.UserID,
 		s.StudentID,
 		s.ProgramStudy,
 		s.AcademicYear,
-		s.AdvisorID,
+		advisorIDValue, 
 	)
-    // Tangkap ID dan timestamps yang dihasilkan DB
-	return row.Scan(&s.ID, &s.CreatedAt, &s.UpdatedAt)
+	
+	// FIX: Hapus &s.UpdatedAt dari Scan
+	return row.Scan(&s.ID, &s.CreatedAt)
 }
 
 // GetByUserID - Mengambil data mahasiswa berdasarkan UserID (UUID)
 func (r *StudentRepository) GetByUserID(ctx context.Context, userID string) (*model.Student, error) {
+	// FIX: Hapus updated_at dari SELECT
 	query := `
-		SELECT id, user_id, student_id, program_study, academic_year, advisor_id, created_at, updated_at
+		SELECT id, user_id, student_id, program_study, academic_year, advisor_id, created_at
 		FROM students
 		WHERE user_id = $1
 		LIMIT 1
 	`
 	row := r.DB.QueryRowContext(ctx, query, userID)
 	var s model.Student
-	err := row.Scan(
-		&s.ID, &s.UserID, &s.StudentID, &s.ProgramStudy, &s.AcademicYear, &s.AdvisorID, &s.CreatedAt, &s.UpdatedAt,
-	)
-	if err != nil {
+	
+	if err := scanStudent(row, &s); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, errors.New("student not found")
+		}
 		return nil, err
 	}
 	return &s, nil
@@ -85,8 +142,9 @@ func (r *StudentRepository) GetByUserID(ctx context.Context, userID string) (*mo
 
 // GetAll - Mengambil daftar semua mahasiswa
 func (r *StudentRepository) GetAll(ctx context.Context) ([]model.Student, error) {
+	// FIX: Hapus updated_at dari SELECT
 	query := `
-		SELECT id, user_id, student_id, program_study, academic_year, advisor_id, created_at, updated_at
+		SELECT id, user_id, student_id, program_study, academic_year, advisor_id, created_at
 		FROM students
 	`
 
@@ -97,24 +155,9 @@ func (r *StudentRepository) GetAll(ctx context.Context) ([]model.Student, error)
 	defer rows.Close()
 
 	var students []model.Student
-
-	for rows.Next() {
-		var s model.Student
-        // Menggunakan := untuk mendeklarasikan 'err' baru di scope loop adalah umum, 
-        // namun untuk menghindari error 'declared and not used', pastikan err di scan dicek.
-		if err := rows.Scan(
-			&s.ID, &s.UserID, &s.StudentID, &s.ProgramStudy, &s.AcademicYear, &s.AdvisorID, &s.CreatedAt, &s.UpdatedAt,
-		); err != nil {
-			return nil, err 
-		}
-
-		students = append(students, s)
+	if err := scanStudents(rows, &students); err != nil {
+		return nil, err
 	}
-    
-    // Pengecekan error dari iterasi rows (rows.Err())
-    if err := rows.Err(); err != nil {
-        return nil, err
-    }
-
+	
 	return students, nil
 }

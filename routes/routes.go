@@ -29,9 +29,7 @@ func SetupRoutes(
 
 	v1 := app.Group("/api/v1") 
 
-	// ----------------------------------------------------------------------
 	// AUTHENTICATION (PUBLIC & PROTECTED)
-	// ----------------------------------------------------------------------
 	v1.Post("/auth/login", authService.Login) 
 	
 	// FIX: Group Protected API
@@ -41,9 +39,7 @@ func SetupRoutes(
 	api.Post("/auth/logout", authService.Logout)   // Method Logout harus ada di AuthService
 	api.Get("/auth/profile", authService.GetProfile) // Method GetProfile harus ada di AuthService
 
-	// ----------------------------------------------------------------------
 	// USERS (Admin Management)
-	// ----------------------------------------------------------------------
 	api.Get("/users", manageUser, userService.GetAll)          
 	api.Post("/users", manageUser, userService.Create)         // FIX: Method Create harus ada
 	api.Get("/users/:id", manageUser, userService.GetDetail)    
@@ -51,9 +47,7 @@ func SetupRoutes(
 	api.Delete("/users/:id", manageUser, userService.Delete)    // FIX: Method Delete harus ada
 	api.Put("/users/:id/role", manageUser, userService.AssignRole) // FIX: Method AssignRole harus ada
 
-	// ----------------------------------------------------------------------
 	// STUDENTS & LECTURERS
-	// ----------------------------------------------------------------------
 	api.Get("/students", studentService.GetAll)
 	api.Get("/students/:id", studentService.GetDetail)
 	api.Get("/students/:id/achievements", studentService.GetAchievements) // FIX: Method GetAchievements harus ada
@@ -62,10 +56,7 @@ func SetupRoutes(
 	api.Get("/lecturers", lecturerService.GetAll)
 	api.Get("/lecturers/:id/advisees", lecturerService.GetAdvisees) // FIX: Method GetAdvisees harus ada
 	
-	// ----------------------------------------------------------------------
 	// ACHIEVEMENTS
-	// ----------------------------------------------------------------------
-	// CRUD
 	api.Get("/achievements", achievementService.GetAll) // FIX: Method GetAll harus ada
 	api.Get("/achievements/:id", achievementService.GetDetail)
 	api.Post("/achievements", checkPerm("achievement:create"), achievementService.Create) 
@@ -81,9 +72,7 @@ func SetupRoutes(
 	api.Post("/achievements/:id/attachments", checkPerm("achievement:update"), achievementService.UploadAttachment) // FIX: Method UploadAttachment harus ada
 	api.Get("/achievements/:id/history", achievementService.GetHistory) // FIX: Method GetHistory harus ada
 	
-	// ----------------------------------------------------------------------
 	// REPORTS & ANALYTICS
-	// ----------------------------------------------------------------------
 	api.Get("/reports/statistics", achievementService.GetStatistics) // FIX: Method GetStatistics harus ada
 	api.Get("/reports/student/:id", achievementService.GetStudentReport) // FIX: Method GetStudentReport harus ada
 

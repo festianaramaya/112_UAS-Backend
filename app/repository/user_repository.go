@@ -197,3 +197,25 @@ func (r *UserRepository) UpdateRole(userID, roleID string) error {
     }
     return nil
 }
+
+// SoftDelete menandai user sebagai tidak aktif
+func (r *UserRepository) SoftDelete(userID string) error {
+    query := `
+        UPDATE users
+        SET is_active = FALSE, updated_at = NOW()
+        WHERE id = $1 AND is_active = TRUE
+    `
+    result, err := r.DB.Exec(query, userID)
+    if err != nil {
+        return err
+    }
+    
+    rowsAffected, err := result.RowsAffected()
+    if err != nil {
+        return err
+    }
+    if rowsAffected == 0 {
+        return errors.New("user not found or already deleted") 
+    }
+    return nil
+}

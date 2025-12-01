@@ -5,6 +5,7 @@ import (
 	"uas/app/model"
 	"uas/app/repository"
 
+	"log"
 	"github.com/gofiber/fiber/v2"
 )
 
@@ -25,6 +26,7 @@ func NewStudentService(repo *repository.StudentRepository) *StudentService {
 // Create (POST /students)
 func (s *StudentService) Create(c *fiber.Ctx) error { 
 	var req model.Student
+    // Catatan: Model req (model.Student) tidak boleh lagi memiliki UpdatedAt field.
 
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(400).JSON(fiber.Map{"error": "Invalid request"})
@@ -32,7 +34,9 @@ func (s *StudentService) Create(c *fiber.Ctx) error {
 
 	// DB akan mengisinya via RETURNING
 	ctx := context.Background()
+	// Repository Create akan mengisi ID dan CreatedAt (dan HANYA ITU)
 	if err := s.StudentRepo.Create(ctx, &req); err != nil { 
+		log.Printf("ERROR: Failed to create student in repo: %v", err)
 		return c.Status(500).JSON(fiber.Map{"error": "Failed to create student"})
 	}
 
@@ -55,16 +59,17 @@ func (s *StudentService) GetDetail(c *fiber.Ctx) error {
 	return c.JSON(result)
 }
 
-// GetAll (GET /students)
+// GetAll - Mengambil daftar semua mahasiswa
 func (s *StudentService) GetAll(c *fiber.Ctx) error {
 	ctx := context.Background()
 
 	result, err := s.StudentRepo.GetAll(ctx) 
 	if err != nil {
+		log.Printf("ERROR: StudentRepo GetAll failed: %v", err) 
 		return c.Status(500).JSON(fiber.Map{"error": "Failed fetching students"})
 	}
-
-	return c.JSON(result)
+	
+	return c.JSON(result) 
 }
 
 
@@ -74,14 +79,14 @@ func (s *StudentService) GetAll(c *fiber.Ctx) error {
 
 // GetAchievements (GET /students/:id/achievements)
 func (s *StudentService) GetAchievements(c *fiber.Ctx) error {
-    studentID := c.Params("id")
-    // Logika: 1. Cek keberadaan studentID, 2. Ambil list achievement references dari PostgreSQL, 
-    // 3. Ambil detail achievement dari MongoDB.
+	studentID := c.Params("id")
+	// Logika: 1. Cek keberadaan studentID, 2. Ambil list achievement references dari PostgreSQL, 
+	// 3. Ambil detail achievement dari MongoDB.
 	return c.Status(501).JSON(fiber.Map{"message": "GetAchievements not yet implemented for ID: " + studentID})
 }
 
 // SetAdvisor (PUT /students/:id/advisor) - Hanya Admin/manageUser
 func (s *StudentService) SetAdvisor(c *fiber.Ctx) error {
-    // Logika: Update field advisor_id di tabel students
+	// Logika: Update field advisor_id di tabel students
 	return c.Status(501).JSON(fiber.Map{"message": "SetAdvisor not yet implemented"})
 }

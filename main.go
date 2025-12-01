@@ -48,12 +48,13 @@ func main() {
 
 	// REPOSITORY (DI)
 	userRepo := repository.NewUserRepository(pgDB)
-	// Placeholder untuk Repository lain
-	studentRepo := &repository.StudentRepository{}
-	achievementRepo := &repository.AchievementRepository{}
-	// FIX: Hapus '&' yang tidak diperlukan
-	lecturerRepo := repository.NewLecturerRepository(pgDB) 
-
+	// FIX: Gunakan konstruktor dan berikan pgDB
+	studentRepo := repository.NewStudentRepository(pgDB) 
+	// FIX: Gunakan konstruktor dan berikan pgDB
+	achievementRepo := repository.NewAchievementRepository(pgDB) 
+	// lecturerRepo sudah benar, tapi pastikan yang ini juga benar
+	lecturerRepo := repository.NewLecturerRepository(pgDB)
+	
 	// SERVICE (DI)
 	authService := service.NewAuthService(userRepo, jwtSecret) 
 	userService := service.NewUserService(userRepo)
