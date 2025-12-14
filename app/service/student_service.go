@@ -6,6 +6,7 @@ import (
 	"uas/app/repository"
 
 	"log"
+	"database/sql"
 	"github.com/gofiber/fiber/v2"
 )
 
@@ -85,8 +86,47 @@ func (s *StudentService) GetAchievements(c *fiber.Ctx) error {
 	return c.Status(501).JSON(fiber.Map{"message": "GetAchievements not yet implemented for ID: " + studentID})
 }
 
+
 // SetAdvisor (PUT /students/:id/advisor) - Hanya Admin/manageUser
 func (s *StudentService) SetAdvisor(c *fiber.Ctx) error {
-	// Logika: Update field advisor_id di tabel students
-	return c.Status(501).JSON(fiber.Map{"message": "SetAdvisor not yet implemented"})
+    studentID := c.Params("id") // ID profil students
+
+    var req struct {
+        AdvisorID string `json:"advisor_id"`
+    }
+
+    if err := c.BodyParser(&req); err != nil {
+        return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid request body"})
+    }
+
+    // 1. Validasi ID yang di-request
+    // Jika req.AdvisorID kosong, kita set ke NULL di database.
+    var advisorIDToSet sql.NullString
+    if req.AdvisorID != "" {
+        // Cek apakah ID Dosen Wali adalah UUID yang valid
+        // (Contoh validasi sederhana: memastikan panjang)
+        if len(req.AdvisorID) != 36 {
+             return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid Advisor UUID format"})
+        }
+        advisorIDToSet.String = req.AdvisorID
+        advisorIDToSet.Valid = true
+    } else {
+        advisorIDToSet.Valid = false // Set ke NULL
+    }
+    
+    ctx := context.Background()
+
+    // 2. Panggil Repository untuk melakukan UPDATE
+    err := s.StudentRepo.UpdateAdvisorID(ctx, studentID, advisorIDToSet) 
+    if err != nil {
+        // Jika terjadi error, kemungkinan: Student ID tidak ditemukan atau Foreign Key (AdvisorID) tidak valid
+        log.Printf("ERROR: Failed to update advisor for student %s: %v", studentID, err)
+        return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to update advisor ID. Check if Student ID or Advisor ID is valid."})
+    }
+
+    return c.Status(fiber.StatusOK).JSON(fiber.Map{
+        "message": "Student advisor updated successfully",
+        "student_id": studentID,
+        "new_advisor_id": advisorIDToSet.String,
+    })
 }

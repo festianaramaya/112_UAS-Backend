@@ -3,12 +3,18 @@ package repository
 import (
 	"context"
 	"errors"
-	"database/sql"
 	"uas/app/model"
+	"github.com/jmoiron/sqlx" 
 )
 
+// GANTI: struct DB menggunakan *sqlx.DB
 type UserRepository struct {
-	DB *sql.DB
+	DB *sqlx.DB
+}
+
+// GANTI: Constructor menerima *sqlx.DB
+func NewUserRepository(db *sqlx.DB) *UserRepository {
+	return &UserRepository{DB: db}
 }
 
 func (r *UserRepository) GetUserPermissions(roleID string) ([]string, error) {
@@ -53,10 +59,6 @@ func (r *UserRepository) GetRoleNameByID(roleID string) (string, error) {
         return "", err
     }
     return roleName, nil
-}
-
-func NewUserRepository(db *sql.DB) *UserRepository {
-	return &UserRepository{DB: db}
 }
 
 func (r *UserRepository) GetAll() ([]model.User, error) {

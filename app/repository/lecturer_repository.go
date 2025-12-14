@@ -1,15 +1,17 @@
 package repository
 
 import (
-	"database/sql"
 	"uas/app/model"
+	"github.com/jmoiron/sqlx" 
 )
 
+// GANTI: struct DB menggunakan *sqlx.DB
 type LecturerRepository struct {
-	DB *sql.DB
+	DB *sqlx.DB
 }
 
-func NewLecturerRepository(db *sql.DB) *LecturerRepository {
+// GANTI: Constructor menerima *sqlx.DB
+func NewLecturerRepository(db *sqlx.DB) *LecturerRepository {
 	return &LecturerRepository{DB: db}
 }
 

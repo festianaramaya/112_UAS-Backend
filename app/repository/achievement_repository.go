@@ -1,96 +1,99 @@
 package repository
 
 import (
+	"context"
 	"database/sql"
 	"uas/app/model"
+
+	"github.com/jmoiron/sqlx"
 )
 
 type AchievementRepository struct {
-	DB *sql.DB
+	DB *sqlx.DB
 }
 
-func NewAchievementRepository(db *sql.DB) *AchievementRepository {
-	return &AchievementRepository{DB: db}
+func NewAchievementRepository(db *sqlx.DB) *AchievementRepository {
+    return &AchievementRepository{DB: db}
 }
 
-// CREATE (status default = "draft")
-func (r *AchievementRepository) Create(a *model.AchievementReference) error {
-	// FIX: Hapus ID dari list kolom INSERT. Tambahkan RETURNING untuk mengambil ID dan timestamps.
-	query := `
-	INSERT INTO achievement_references
-	(student_id, mongo_achievement_id, status)
-	VALUES ($1, $2, $3)
-    RETURNING id, created_at, updated_at
+// CREATE
+func (r *AchievementRepository) Create(ctx context.Context, ref *model.AchievementReference) (string, error) {
+    // ... (Implementasi INSERT/RETURNING id) ...
+    query := `
+		INSERT INTO achievement_references (
+			student_id, mongo_achievement_id, status, created_at, updated_at
+		) VALUES (
+			$1, $2, $3, NOW(), NOW()
+		) RETURNING id
 	`
-
-    // FIX: Hapus a.ID dari parameter Exec. Gunakan QueryRow untuk menangkap hasil.
-	row := r.DB.QueryRow(
-		query,
-		a.StudentID,
-		a.MongoAchievementID,
-		a.Status,
-	)
-    // FIX: Tangkap nilai yang dikembalikan
-    return row.Scan(&a.ID, &a.CreatedAt, &a.UpdatedAt)
-}
-
-// GET BY ID
-func (r *AchievementRepository) GetByID(id string) (*model.AchievementReference, error) {
-	query := `
-	SELECT id, student_id, mongo_achievement_id, status,
-	        submitted_at, verified_at, verified_by, rejection_note,
-	        created_at, updated_at
-	FROM achievement_references
-	WHERE id = $1
-	`
-    // Note: Nama tabel harusnya 'achievement_references' (plural) sesuai DDL.
-    // Query yang Anda berikan menggunakan 'achievement_reference' (singular), diasumsikan 'achievement_references'.
-
-	row := r.DB.QueryRow(query, id)
-
-	var a model.AchievementReference
-
-	err := row.Scan(
-		&a.ID,
-		&a.StudentID,
-		&a.MongoAchievementID,
-		&a.Status,
-		&a.SubmittedAt,
-		&a.VerifiedAt,
-		&a.VerifiedBy,
-		&a.RejectionNote,
-		&a.CreatedAt,
-		&a.UpdatedAt,
-	)
-
+	var pgID string
+	err := r.DB.QueryRowContext(ctx, query, ref.StudentID, ref.MongoAchievementID, ref.Status).Scan(&pgID)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
-
-	return &a, nil
+	return pgID, nil
 }
 
-// UPDATE STATUS
-func (r *AchievementRepository) UpdateStatus(
-	id string,
-	status string,
-	verifiedBy *string,
-	rejectionNote *string,
-) error {
-    // Note: Logika CASE di SQL yang Anda berikan sudah kompleks dan cenderung benar.
-    // Diasumsikan *string* yang dikirim dari Go dapat diinterpretasikan dengan benar oleh SQL.
+// GET DETAIL
+func (r *AchievementRepository) GetByID(ctx context.Context, id string) (model.AchievementReference, error) {
+    // ... (Implementasi SELECT BY ID) ...
+    var ref model.AchievementReference
+    query := `
+        SELECT id, student_id, mongo_achievement_id, status, submitted_at, verified_at, verified_by, rejection_note, created_at, updated_at
+        FROM achievement_references
+        WHERE id = $1
+    `
+    err := r.DB.GetContext(ctx, &ref, query, id)
+    return ref, err
+}
 
-	query := `
-	UPDATE achievement_references
-	SET status = $1,
-		verified_by = $2,
-		rejection_note = $3,
-		verified_at = CASE WHEN $1='verified' THEN NOW() ELSE NULL END,
-		submitted_at = CASE WHEN $1='submitted' THEN NOW() ELSE submitted_at END,
-		updated_at = NOW()
-	WHERE id = $4
+// GET ALL (METHOD HILANG YANG DIPERLUKAN OLEH SERVICE)
+func (r *AchievementRepository) GetAll(ctx context.Context) ([]model.AchievementReference, error) {
+    var refs []model.AchievementReference
+    query := `
+        SELECT id, student_id, mongo_achievement_id, status, submitted_at, verified_at, verified_by, rejection_note, created_at, updated_at
+        FROM achievement_references
+    `
+    err := r.DB.SelectContext(ctx, &refs, query)
+    return refs, err
+}
+
+// UPDATE STATUS (SUDAH ADA)
+func (r *AchievementRepository) UpdateStatus(ctx context.Context, id string, status string, verifiedBy sql.NullString, rejectionNote sql.NullString) error {
+    // ... (Implementasi UPDATE STATUS) ...
+    query := `
+		UPDATE achievement_references
+		SET status = $1, verified_by = $2, rejection_note = $3, updated_at = NOW(),
+			verified_at = CASE WHEN $1 IN ('verified', 'rejected') THEN NOW() ELSE verified_at END
+		WHERE id = $4
 	`
+	res, err := r.DB.ExecContext(ctx, query, status, verifiedBy, rejectionNote, id)
+	if err != nil { return err }
+	if rows, _ := res.RowsAffected(); rows == 0 { return sql.ErrNoRows }
+	return nil
+}
 
-	_, err := r.DB.Exec(query, status, verifiedBy, rejectionNote, id)
-	return err
+// UPDATE TIMESTAMP (METHOD HILANG YANG DIPERLUKAN OLEH SERVICE)
+func (r *AchievementRepository) UpdateTimestamp(ctx context.Context, id string) error {
+    query := `
+        UPDATE achievement_references
+        SET updated_at = NOW()
+        WHERE id = $1
+    `
+    res, err := r.DB.ExecContext(ctx, query, id)
+    if err != nil { return err }
+    if rows, _ := res.RowsAffected(); rows == 0 { return sql.ErrNoRows }
+    return nil
+}
+
+// DELETE (METHOD HILANG YANG DIPERLUKAN OLEH SERVICE)
+func (r *AchievementRepository) Delete(ctx context.Context, id string) error {
+    query := `
+        DELETE FROM achievement_references
+        WHERE id = $1
+    `
+    res, err := r.DB.ExecContext(ctx, query, id)
+    if err != nil { return err }
+    if rows, _ := res.RowsAffected(); rows == 0 { return sql.ErrNoRows }
+    return nil
 }

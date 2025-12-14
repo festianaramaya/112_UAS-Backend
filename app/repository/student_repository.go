@@ -5,13 +5,16 @@ import (
 	"database/sql"
 	"uas/app/model"
 	"errors"
+	"fmt"
+	"github.com/jmoiron/sqlx"
 )
 
 type StudentRepository struct {
-	DB *sql.DB
+	DB *sqlx.DB
 }
 
-func NewStudentRepository(db *sql.DB) *StudentRepository {
+// GANTI: Constructor menerima *sqlx.DB
+func NewStudentRepository(db *sqlx.DB) *StudentRepository {
 	return &StudentRepository{DB: db}
 }
 
@@ -160,4 +163,29 @@ func (r *StudentRepository) GetAll(ctx context.Context) ([]model.Student, error)
 	}
 	
 	return students, nil
+}
+
+// UpdateAdvisorID memperbarui kolom advisor_id di tabel students
+func (r *StudentRepository) UpdateAdvisorID(ctx context.Context, studentID string, advisorID sql.NullString) error {
+    query := `
+        UPDATE students
+        SET advisor_id = $1
+        WHERE id = $2
+    `
+    // Gunakan Exec untuk menjalankan perintah non-query
+    result, err := r.DB.ExecContext(ctx, query, advisorID, studentID)
+    if err != nil {
+        return err
+    }
+
+    // Cek apakah ada baris yang terpengaruh (pastikan studentID ditemukan)
+    rowsAffected, err := result.RowsAffected()
+    if err != nil {
+        return err
+    }
+    if rowsAffected == 0 {
+        return fmt.Errorf("student with ID %s not found", studentID) // Tambahkan error handling jika ID tidak ditemukan
+    }
+
+    return nil
 }

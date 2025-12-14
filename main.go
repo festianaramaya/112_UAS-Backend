@@ -5,75 +5,89 @@ import (
 	"os"
 
 	"github.com/joho/godotenv"
+	"github.com/jmoiron/sqlx"
+
 	"uas/database"
 	"uas/routes"
 	"uas/app/service"
 	"uas/app/repository"
-	"uas/utils" // Import utilitas untuk seeder
-
+	"uas/utils"
 )
 
 func main() {
-	// 1. LOAD .ENV FILE
-	godotenv.Load()
+	// Load environment variables dari file .env
+	if err := godotenv.Load(); err != nil {
+		log.Println("Warning: .env file not loaded")
+	}
 
-	// 2. CONNECT DATABASE (PostgreSQL)
-	pgDB, err := database.ConnectPostgres()
+	// Koneksi ke database PostgreSQL
+	pgDBStandard, err := database.ConnectPostgres()
 	if err != nil {
 		log.Fatalf("Failed to connect PostgreSQL: %v", err)
 	}
-	defer pgDB.Close()
+	defer pgDBStandard.Close()
 
-	// 3. DDL & SEEDING 
-	if err := utils.SetupDatabase(pgDB); err != nil {
-		log.Fatalf("Failed to setup database (DDL/Seeding): %v", err)
+	// Konversi *sql.DB ke *sqlx.DB agar mendukung fitur sqlx
+	pgDB := sqlx.NewDb(pgDBStandard, "postgres")
+
+	// Menjalankan DDL dan seeding database
+	if err := utils.SetupDatabase(pgDBStandard); err != nil {
+		log.Fatalf("Failed to setup database: %v", err)
 	}
 
-	// 4. CONNECT DATABASE (MongoDB)
-	_, err = database.ConnectMongo() 
+	// Koneksi ke MongoDB (mengembalikan *mongo.Database)
+	mongoDB, err := database.ConnectMongo()
 	if err != nil {
 		log.Fatalf("Failed to connect MongoDB: %v", err)
 	}
-	
-	// 5. AMBIL CONFIG DARI ENV
+
+	// Mengambil collection achievements dari MongoDB
+	achievementCollection := mongoDB.Collection("achievements")
+
+	// Mengambil konfigurasi dari environment
 	jwtSecret := os.Getenv("JWT_SECRET")
 	appPort := os.Getenv("PORT")
+
 	if jwtSecret == "" {
 		log.Fatal("JWT_SECRET is not set in .env")
 	}
+
 	if appPort == "" {
 		appPort = "3000"
 	}
 
-
-	// REPOSITORY (DI)
+	// Inisialisasi repository PostgreSQL
 	userRepo := repository.NewUserRepository(pgDB)
-	// FIX: Gunakan konstruktor dan berikan pgDB
-	studentRepo := repository.NewStudentRepository(pgDB) 
-	// FIX: Gunakan konstruktor dan berikan pgDB
-	achievementRepo := repository.NewAchievementRepository(pgDB) 
-	// lecturerRepo sudah benar, tapi pastikan yang ini juga benar
+	studentRepo := repository.NewStudentRepository(pgDB)
 	lecturerRepo := repository.NewLecturerRepository(pgDB)
-	
-	// SERVICE (DI)
-	authService := service.NewAuthService(userRepo, jwtSecret) 
+
+	// Inisialisasi repository achievement (Postgres & MongoDB)
+	pgAchievementRepo := repository.NewAchievementRepository(pgDB)
+	mongoAchievementRepo := repository.NewMongoAchievementRepository(achievementCollection)
+
+	// Inisialisasi service
+	authService := service.NewAuthService(userRepo, jwtSecret)
 	userService := service.NewUserService(userRepo)
 	studentService := service.NewStudentService(studentRepo)
-	achievementService := service.NewAchievementService(achievementRepo)
 	lecturerService := service.NewLecturerService(lecturerRepo)
 
-	// ROUTES
-	// FIX: Sesuaikan urutan pemanggilan dengan signature di routes.go
+	// Service achievement membutuhkan dua repository
+	achievementService := service.NewAchievementService(
+		pgAchievementRepo,
+		mongoAchievementRepo,
+	)
+
+	// Setup routes dan middleware
 	app := routes.SetupRoutes(
 		authService,
 		userService,
 		studentService,
 		lecturerService,
 		achievementService,
-		jwtSecret, // JWT Secret sebagai parameter terakhir
+		jwtSecret,
 	)
 
-	// LISTEN
+	// Menjalankan server
 	log.Printf("Server running on port %s", appPort)
 	log.Fatal(app.Listen(":" + appPort))
 }
