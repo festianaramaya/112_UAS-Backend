@@ -1,7 +1,6 @@
 package database
 
 import (
-	"context"
 	"database/sql"
 	"log"
 	"os"
@@ -9,8 +8,6 @@ import (
 	"time"
 
 	_ "github.com/lib/pq"
-    "go.mongodb.org/mongo-driver/mongo" // <--- DIBUTUHKAN
-	"go.mongodb.org/mongo-driver/mongo/options" // <--- DIBUTUHKAN
 )
 
 // ConnectPostgres menginisialisasi koneksi ke PostgreSQL
@@ -50,32 +47,4 @@ func ConnectPostgres() (*sql.DB, error) {
 
 	log.Println("✅ Berhasil konek ke database PostgreSQL.")
 	return db, nil
-}
-
-// ConnectMongo menginisialisasi koneksi ke MongoDB (mengambil URI dari .env)
-func ConnectMongo() (*mongo.Database, error) {
-	mongoURI := os.Getenv("MONGO_URI")
-	mongoDBName := os.Getenv("MONGO_DB")
-	
-	if mongoURI == "" || mongoDBName == "" {
-		log.Fatal("MONGO_URI or MONGO_DB environment variables are not set.")
-	}
-	
-	clientOptions := options.Client().ApplyURI(mongoURI)
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	client, err := mongo.Connect(ctx, clientOptions)
-	if err != nil {
-		log.Println("❌ Gagal koneksi MongoDB client:", err)
-		return nil, err
-	}
-
-	if err = client.Ping(ctx, nil); err != nil {
-		log.Println("❌ Gagal ping MongoDB:", err)
-		return nil, err
-	}
-
-	log.Println("✅ Berhasil konek ke database MongoDB.")
-	return client.Database(mongoDBName), nil
 }
