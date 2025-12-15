@@ -37,3 +37,18 @@ type AchievementCreateUpdate struct {
     Details         map[string]interface{} `json:"details"`
     Attachments     []Attachment `json:"attachments"`
 }
+
+type AchievementCreateResponse struct {
+	ID                 string    `json:"id"`
+	MongoAchievementID string    `json:"mongo_achievement_id"`
+	StudentID          string    `json:"student_id"`
+	Status             string    `json:"status"`
+	CreatedAt          time.Time `json:"created_at"`
+}
+
+type AchievementCreateRequest struct {
+	StudentID   string `json:"student_id"`
+	Title       string `json:"title"`
+	Description string `json:"description"`
+	Category    string `json:"category"`
+}

@@ -8,7 +8,7 @@ import (
 // MongoAchievement adalah struktur untuk Collection di MongoDB (Detail)
 type MongoAchievement struct {
     ID             primitive.ObjectID `bson:"_id,omitempty" json:"id"`
-    StudentID      string             `bson:"student_id" json:"studentId"`
+    StudentID      string             `bson:"student_id" json:"student_id"`
     AchievementType string             `bson:"achievement_type" json:"achievementType"`
     Title          string             `bson:"title" json:"title"`
     Description    string             `bson:"description" json:"description"`

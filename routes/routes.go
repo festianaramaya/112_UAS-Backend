@@ -18,6 +18,8 @@ func SetupRoutes(
 ) *fiber.App {
 
 	app := fiber.New()
+
+	app.Static("/uploads", "./uploads")
 	
 	// FIX: Inisialisasi Auth Middleware (Asumsi middleware.AuthRequired mengembalikan fiber.Handler)
 	authMiddleware := middleware.AuthRequired(jwtSecret) 
