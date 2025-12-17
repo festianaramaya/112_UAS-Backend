@@ -151,3 +151,114 @@ func (r *AchievementRepository) Delete(
 
 	return nil
 }
+
+func (r *AchievementRepository) GetAdviseeAchievements(
+	ctx context.Context,
+	lecturerID uuid.UUID,
+) ([]model.AchievementFull, error) {
+
+	var achievements []model.AchievementFull
+
+	query := `
+		SELECT *
+		FROM achievements
+		WHERE lecturer_id = $1
+	`
+
+	err := r.DB.SelectContext(ctx, &achievements, query, lecturerID)
+	if err != nil {
+		return nil, err
+	}
+
+	return achievements, nil
+}
+
+func (r *AchievementRepository) GetStatistics(ctx context.Context) (map[string]int, error) {
+	query := `
+		SELECT
+			COUNT(*) AS total,
+			COUNT(*) FILTER (WHERE status = 'verified') AS verified,
+			COUNT(*) FILTER (WHERE status = 'rejected') AS rejected,
+			COUNT(*) FILTER (WHERE status = 'submitted') AS submitted
+		FROM achievement_references
+	`
+
+	var stats struct {
+		Total     int `db:"total"`
+		Verified  int `db:"verified"`
+		Rejected  int `db:"rejected"`
+		Submitted int `db:"submitted"`
+	}
+
+	err := r.DB.GetContext(ctx, &stats, query)
+	if err != nil {
+		return nil, err
+	}
+
+	return map[string]int{
+		"total":     stats.Total,
+		"verified":  stats.Verified,
+		"rejected":  stats.Rejected,
+		"submitted": stats.Submitted,
+	}, nil
+}
+
+func (r *AchievementRepository) GetStudentReport(
+	ctx context.Context,
+	studentID string,
+) (map[string]int, error) {
+
+	query := `
+		SELECT
+			COUNT(*) AS total,
+			COUNT(*) FILTER (WHERE status = 'verified') AS verified,
+			COUNT(*) FILTER (WHERE status = 'submitted') AS submitted,
+			COUNT(*) FILTER (WHERE status = 'rejected') AS rejected
+		FROM achievement_references
+		WHERE student_id = $1
+	`
+
+	var result struct {
+		Total     int `db:"total"`
+		Verified  int `db:"verified"`
+		Submitted int `db:"submitted"`
+		Rejected  int `db:"rejected"`
+	}
+
+	err := r.DB.GetContext(ctx, &result, query, studentID)
+	if err != nil {
+		return nil, err
+	}
+
+	return map[string]int{
+		"total":     result.Total,
+		"verified":  result.Verified,
+		"submitted": result.Submitted,
+		"rejected":  result.Rejected,
+	}, nil
+}
+
+func (r *AchievementRepository) GetStatusHistory(
+	ctx context.Context,
+	id uuid.UUID,
+) ([]model.AchievementHistory, error) {
+
+	query := `
+		SELECT
+			status,
+			note,
+			updated_at
+		FROM achievement_status_histories
+		WHERE achievement_id = $1
+		ORDER BY updated_at ASC
+	`
+
+	var history []model.AchievementHistory
+
+	err := r.DB.SelectContext(ctx, &history, query, id)
+	if err != nil {
+		return nil, err
+	}
+
+	return history, nil
+}

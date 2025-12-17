@@ -69,7 +69,10 @@ func main() {
 	authService := service.NewAuthService(userRepo, jwtSecret)
 	userService := service.NewUserService(userRepo)
 	studentService := service.NewStudentService(studentRepo)
-	lecturerService := service.NewLecturerService(lecturerRepo)
+	lecturerService := service.NewLecturerService(
+	mongoAchievementRepo,
+	lecturerRepo,
+	)
 
 	// Service achievement membutuhkan dua repository
 	achievementService := service.NewAchievementService(

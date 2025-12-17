@@ -162,28 +162,58 @@ func (s *AchievementService) Submit(c *fiber.Ctx) error {
 
 
 func (s *AchievementService) Verify(c *fiber.Ctx) error {
-	id, _ := uuid.Parse(c.Params("id"))
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return fiber.ErrBadRequest
+	}
 
-	return s.PgRepo.UpdateStatus(
+	err = s.PgRepo.UpdateStatus(
 		c.Context(),
 		id,
 		"verified",
-		sql.NullString{String: "admin", Valid: true},
+		sql.NullString{String: "lecturer", Valid: true},
 		sql.NullString{},
 	)
+	if err != nil {
+		return err
+	}
+
+	return c.JSON(fiber.Map{
+		"message": "Achievement verified successfully",
+		"status":  "verified",
+	})
 }
 
 func (s *AchievementService) Reject(c *fiber.Ctx) error {
-	id, _ := uuid.Parse(c.Params("id"))
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return fiber.ErrBadRequest
+	}
 
-	return s.PgRepo.UpdateStatus(
+	var body struct {
+		Note string `json:"note"`
+	}
+	_ = c.BodyParser(&body)
+
+	err = s.PgRepo.UpdateStatus(
 		c.Context(),
 		id,
 		"rejected",
 		sql.NullString{},
-		sql.NullString{String: "Rejected by verifier", Valid: true},
+		sql.NullString{String: body.Note, Valid: true},
 	)
+	if err != nil {
+		return err
+	}
+
+	return c.JSON(fiber.Map{
+		"message": "Achievement rejected",
+		"status":  "rejected",
+		"note":    body.Note,
+	})
 }
+
+
 
 /* ===================== EXTRA FEATURES ===================== */
 func (s *AchievementService) UploadAttachment(c *fiber.Ctx) error {
@@ -244,29 +274,47 @@ func (s *AchievementService) UploadAttachment(c *fiber.Ctx) error {
 }
 
 func (s *AchievementService) GetHistory(c *fiber.Ctx) error {
-	// Dummy history
-	return c.JSON([]fiber.Map{
-		{"status": "draft"},
-		{"status": "submitted"},
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return fiber.ErrBadRequest
+	}
+
+	history, err := s.PgRepo.GetStatusHistory(c.Context(), id)
+	if err != nil {
+		return err
+	}
+
+	return c.JSON(fiber.Map{
+		"message": "Achievement status history",
+		"data":    history,
 	})
 }
 
 func (s *AchievementService) GetStatistics(c *fiber.Ctx) error {
-	// Dummy statistics
+	stats, err := s.PgRepo.GetStatistics(c.Context())
+	if err != nil {
+		return err
+	}
+
 	return c.JSON(fiber.Map{
-		"total":     10,
-		"verified":  5,
-		"rejected":  2,
-		"submitted": 3,
+		"message": "Achievement statistics",
+		"data":    stats,
 	})
 }
 
 func (s *AchievementService) GetStudentReport(c *fiber.Ctx) error {
 	studentID := c.Params("id")
 
+	report, err := s.PgRepo.GetStudentReport(c.Context(), studentID)
+	if err != nil {
+		return err
+	}
+
 	return c.JSON(fiber.Map{
-		"student_id": studentID,
-		"total":      4,
-		"verified":   2,
+		"message": "Student achievement report",
+		"data": fiber.Map{
+			"student_id": studentID,
+			"summary":    report,
+		},
 	})
 }

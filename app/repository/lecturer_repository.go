@@ -2,41 +2,42 @@ package repository
 
 import (
 	"uas/app/model"
-	"github.com/jmoiron/sqlx" 
+
+	"github.com/jmoiron/sqlx"
 )
 
-// GANTI: struct DB menggunakan *sqlx.DB
 type LecturerRepository struct {
 	DB *sqlx.DB
 }
 
-// GANTI: Constructor menerima *sqlx.DB
 func NewLecturerRepository(db *sqlx.DB) *LecturerRepository {
 	return &LecturerRepository{DB: db}
 }
 
 // CREATE lecturer
 func (r *LecturerRepository) Create(lec *model.Lecturer) error {
-	// FIX: Hapus ID dari kolom INSERT. Tambahkan RETURNING.
 	query := `
 		INSERT INTO lecturers (user_id, lecturer_id, department)
 		VALUES ($1, $2, $3)
-        RETURNING id, created_at
+		RETURNING id, created_at
 	`
 
-	row := r.DB.QueryRow(query,
+	row := r.DB.QueryRow(
+		query,
 		lec.UserID,
 		lec.LecturerID,
 		lec.Department,
 	)
-    // FIX: Tangkap ID dan created_at yang dihasilkan DB
+
 	return row.Scan(&lec.ID, &lec.CreatedAt)
 }
 
+// GET ALL lecturers
 func (r *LecturerRepository) GetAll() ([]model.Lecturer, error) {
 	rows, err := r.DB.Query(`
 		SELECT id, user_id, lecturer_id, department, created_at
-		FROM lecturers`)
+		FROM lecturers
+	`)
 	if err != nil {
 		return nil, err
 	}
@@ -67,20 +68,17 @@ func (r *LecturerRepository) GetLecturerByID(id string) (*model.Lecturer, error)
 		FROM lecturers
 		WHERE id = $1
 	`
-    // ... (Logika GetLecturerByID sudah benar)
+
 	row := r.DB.QueryRow(query, id)
 
 	var lec model.Lecturer
-
-	err := row.Scan(
+	if err := row.Scan(
 		&lec.ID,
 		&lec.UserID,
 		&lec.LecturerID,
 		&lec.Department,
 		&lec.CreatedAt,
-	)
-
-	if err != nil {
+	); err != nil {
 		return nil, err
 	}
 

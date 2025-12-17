@@ -1,63 +1,94 @@
 package service
 
 import (
+	"context"
+	"fmt"
+	"log"
+
 	"github.com/gofiber/fiber/v2"
+	"github.com/google/uuid"
+
 	"uas/app/model"
 	"uas/app/repository"
 )
 
 type LecturerService struct {
-	repo *repository.LecturerRepository
+	MongoAchieveRepo *repository.MongoAchievementRepository
+	LecturerRepo     *repository.LecturerRepository
 }
 
-func NewLecturerService(repo *repository.LecturerRepository) *LecturerService {
-	return &LecturerService{repo: repo}
-}
-
-func (s *LecturerService) CreateLecturer(c *fiber.Ctx) error {
-	var l model.Lecturer
-	if err := c.BodyParser(&l); err != nil {
-		return c.Status(400).JSON(fiber.Map{"error": err.Error()})
+// helper parse UUID
+func parseUUIDParam(c *fiber.Ctx) (uuid.UUID, error) {
+	idStr := c.Params("id")
+	if idStr == "" {
+		return uuid.Nil, fmt.Errorf("ID is required")
 	}
 
-	if err := s.repo.Create(&l); err != nil {
-		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
-	}
-
-	return c.JSON(fiber.Map{"message": "Lecturer created successfully"})
-}
-
-func (s *LecturerService) GetLecturerByID(c *fiber.Ctx) error {
-	id := c.Params("id")
-
-	lecturer, err := s.repo.GetLecturerByID(id)
+	id, err := uuid.Parse(idStr)
 	if err != nil {
-		return c.Status(404).JSON(fiber.Map{"error": "Lecturer not found"})
+		return uuid.Nil, fmt.Errorf("invalid UUID format")
 	}
 
-	return c.JSON(lecturer)
+	return id, nil
 }
 
+// GET ALL lecturers
 func (s *LecturerService) GetAll(c *fiber.Ctx) error {
-	result, err := s.repo.GetAll()
+	lecturers, err := s.LecturerRepo.GetAll()
 	if err != nil {
-		return c.Status(500).JSON(fiber.Map{"error": "failed fetching lecturers"})
-	}
-	return c.JSON(result)
-}
-
-func (s *LecturerService) GetDetail(c *fiber.Ctx) error {
-	id := c.Params("id")
-
-	result, err := s.repo.GetLecturerByID(id)
-	if err != nil {
-		return c.Status(404).JSON(fiber.Map{"error": "lecturer not found"})
+		return c.Status(500).JSON(fiber.Map{
+			"error": "Failed to fetch lecturers",
+		})
 	}
 
-	return c.JSON(result)
+	return c.JSON(fiber.Map{
+		"message": "List of lecturers",
+		"data":    lecturers,
+		"total":   len(lecturers),
+	})
 }
 
-// Tambahkan ini ke lecturer_service.go
+// GET advisee achievements (MONGO)
 func (s *LecturerService) GetAdvisees(c *fiber.Ctx) error {
-	return c.Status(200).JSON(fiber.Map{"message": "List of advisee achievements fetched successfully (FR-006)"})
+	lecturerID, err := parseUUIDParam(c)
+	if err != nil {
+		return c.Status(400).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	ctx := context.Background()
+
+	results, err := s.MongoAchieveRepo.GetAdviseeAchievements(ctx, lecturerID)
+	if err != nil {
+		log.Println("Mongo GetAdvisees error:", err)
+		return c.Status(500).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	if len(results) == 0 {
+		return c.JSON(fiber.Map{
+			"message": "No advisee achievements found",
+			"data":    []model.AchievementFull{},
+			"total":   0,
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"message": "List of advisee achievements",
+		"data":    results,
+		"total":   len(results),
+	})
+}
+
+// constructor (MONGO VERSION)
+func NewLecturerService(
+	mongoAchieveRepo *repository.MongoAchievementRepository,
+	lecturerRepo *repository.LecturerRepository,
+) *LecturerService {
+	return &LecturerService{
+		MongoAchieveRepo: mongoAchieveRepo,
+		LecturerRepo:     lecturerRepo,
+	}
 }

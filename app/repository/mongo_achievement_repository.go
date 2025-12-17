@@ -6,6 +6,7 @@ import (
 	"time"
 	"uas/app/model"
 
+	"github.com/google/uuid"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -15,23 +16,49 @@ type MongoAchievementRepository struct {
 	Collection *mongo.Collection
 }
 
-func NewMongoAchievementRepository(col *mongo.Collection) *MongoAchievementRepository {
-	return &MongoAchievementRepository{Collection: col}
-}
-
 func (r *MongoAchievementRepository) Create(
 	ctx context.Context,
-	achievement *model.MongoAchievement,
+	data *model.MongoAchievement,
 ) (primitive.ObjectID, error) {
 
-	achievement.CreatedAt = time.Now()
-	achievement.UpdatedAt = time.Now()
+	data.ID = primitive.NewObjectID()
 
-	res, err := r.Collection.InsertOne(ctx, achievement)
+	_, err := r.Collection.InsertOne(ctx, data)
 	if err != nil {
 		return primitive.NilObjectID, err
 	}
-	return res.InsertedID.(primitive.ObjectID), nil
+
+	return data.ID, nil
+}
+
+
+func NewMongoAchievementRepository(col *mongo.Collection) *MongoAchievementRepository {
+	return &MongoAchievementRepository{
+		Collection: col,
+	}
+}
+
+func (r *MongoAchievementRepository) GetAdviseeAchievements(
+	ctx context.Context,
+	lecturerID uuid.UUID,
+) ([]model.AchievementFull, error) {
+
+	filter := bson.M{
+		"lecturer_id": lecturerID.String(), // ⬅️ Mongo simpan UUID sebagai string
+	}
+
+	cursor, err := r.Collection.Find(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var achievements []model.AchievementFull
+	if err := cursor.All(ctx, &achievements); err != nil {
+		return nil, err
+	}
+
+	return achievements, nil
 }
 
 func (r *MongoAchievementRepository) GetByID(

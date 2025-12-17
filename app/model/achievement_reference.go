@@ -52,3 +52,17 @@ type AchievementCreateRequest struct {
 	Description string `json:"description"`
 	Category    string `json:"category"`
 }
+
+// Struct untuk referensi PG saat di-join dengan tabel students (untuk NIM)
+type AchievementReferenceWithNIM struct {
+	AchievementReference // Embed struct dasar PG
+	
+    // Field dari tabel JOIN
+    StudentNIM string `db:"student_nim" json:"student_nim"` 
+}
+
+type AchievementHistory struct {
+	Status    string    `db:"status" json:"status"`
+	Note      *string   `db:"note" json:"note,omitempty"`
+	UpdatedAt time.Time `db:"updated_at" json:"updated_at"`
+}
