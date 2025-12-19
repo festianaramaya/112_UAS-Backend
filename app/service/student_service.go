@@ -2,57 +2,95 @@ package service
 
 import (
 	"context"
+	"database/sql"
+	"log"
+
 	"uas/app/model"
 	"uas/app/repository"
 
-	"log"
-	"database/sql"
 	"github.com/gofiber/fiber/v2"
+	"github.com/google/uuid"
 )
 
 type StudentService struct {
-	StudentRepo *repository.StudentRepository
+	StudentRepo     *repository.StudentRepository
+	AchievementRepo *repository.AchievementRepository
 }
 
-func NewStudentService(repo *repository.StudentRepository) *StudentService {
+func NewStudentService(
+	studentRepo *repository.StudentRepository,
+	achievementRepo *repository.AchievementRepository,
+) *StudentService {
 	return &StudentService{
-		StudentRepo: repo,
+		StudentRepo:     studentRepo,
+		AchievementRepo: achievementRepo,
 	}
 }
 
-// ===============================================
-// Implementasi CRUD
-// ===============================================
-
-// Create (POST /students)
-func (s *StudentService) Create(c *fiber.Ctx) error { 
+// Create godoc
+// @Summary Create student
+// @Description Create new student
+// @Tags Students
+// @Security BearerAuth
+// @Accept json
+// @Produce json
+// @Param request body model.Student true "Student Data"
+// @Success 201 {object} model.Student
+// @Failure 400 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /api/v1/students [post]
+func (s *StudentService) Create(c *fiber.Ctx) error {
 	var req model.Student
-    // Catatan: Model req (model.Student) tidak boleh lagi memiliki UpdatedAt field.
 
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(400).JSON(fiber.Map{"error": "Invalid request"})
 	}
 
-	// DB akan mengisinya via RETURNING
 	ctx := context.Background()
-	// Repository Create akan mengisi ID dan CreatedAt (dan HANYA ITU)
-	if err := s.StudentRepo.Create(ctx, &req); err != nil { 
-		log.Printf("ERROR: Failed to create student in repo: %v", err)
+
+	if err := s.StudentRepo.Create(ctx, &req); err != nil {
+		log.Printf("ERROR create student: %v", err)
 		return c.Status(500).JSON(fiber.Map{"error": "Failed to create student"})
 	}
 
-	return c.Status(201).JSON(fiber.Map{
-		"message": "Student created successfully",
-		"data":req, 
-	})
+	return c.Status(201).JSON(req)
 }
 
-// GetDetail (GET /students/:id)
+// GetAll godoc
+// @Summary Get all students
+// @Description Get list of students
+// @Tags Students
+// @Security BearerAuth
+// @Produce json
+// @Success 200 {array} model.Student
+// @Failure 500 {object} map[string]string
+// @Router /api/v1/students [get]
+func (s *StudentService) GetAll(c *fiber.Ctx) error {
+	ctx := context.Background()
+
+	result, err := s.StudentRepo.GetAll(ctx)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": "Failed fetching students"})
+	}
+
+	return c.JSON(result)
+}
+
+// GetDetail godoc
+// @Summary Get student detail
+// @Description Get student detail by ID
+// @Tags Students
+// @Security BearerAuth
+// @Produce json
+// @Param id path string true "Student ID"
+// @Success 200 {object} model.Student
+// @Failure 404 {object} map[string]string
+// @Router /api/v1/students/{id} [get]
 func (s *StudentService) GetDetail(c *fiber.Ctx) error {
 	id := c.Params("id")
 
 	ctx := context.Background()
-	result, err := s.StudentRepo.GetStudentByID(ctx, id) 
+	result, err := s.StudentRepo.GetStudentByID(ctx, id)
 	if err != nil {
 		return c.Status(404).JSON(fiber.Map{"error": "Student not found"})
 	}
@@ -60,73 +98,75 @@ func (s *StudentService) GetDetail(c *fiber.Ctx) error {
 	return c.JSON(result)
 }
 
-// GetAll - Mengambil daftar semua mahasiswa
-func (s *StudentService) GetAll(c *fiber.Ctx) error {
+// GetAchievements godoc
+// @Summary Get student achievements
+// @Description Get all achievements of a student
+// @Tags Students
+// @Security BearerAuth
+// @Produce json
+// @Param id path string true "Student ID"
+// @Success 200 {object} map[string]interface{}
+// @Router /api/v1/students/{id}/achievements [get]
+func (s *StudentService) GetAchievements(c *fiber.Ctx) error {
+	studentID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(400).JSON(fiber.Map{"error": "Invalid student ID"})
+	}
+
+	data, err := s.AchievementRepo.GetByStudentID(
+		c.Context(),
+		studentID,
+	)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": "Failed fetching achievements"})
+	}
+
+	return c.JSON(fiber.Map{
+		"student_id": studentID,
+		"total":      len(data),
+		"data":       data,
+	})
+}
+
+// SetAdvisor godoc
+// @Summary Set student advisor
+// @Description Assign advisor (dosen wali) to student
+// @Tags Students
+// @Security BearerAuth
+// @Accept json
+// @Produce json
+// @Param id path string true "Student ID"
+// @Param request body object{advisor_id=string} true "Advisor ID"
+// @Success 200 {object} map[string]string
+// @Failure 400 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /api/v1/students/{id}/advisor [put]
+func (s *StudentService) SetAdvisor(c *fiber.Ctx) error {
+	studentID := c.Params("id")
+
+	var req struct {
+		AdvisorID string `json:"advisor_id"`
+	}
+
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(400).JSON(fiber.Map{"error": "Invalid request body"})
+	}
+
+	var advisorID sql.NullString
+
+	if req.AdvisorID != "" {
+		if _, err := uuid.Parse(req.AdvisorID); err != nil {
+			return c.Status(400).JSON(fiber.Map{"error": "Invalid advisor UUID"})
+		}
+		advisorID.String = req.AdvisorID
+		advisorID.Valid = true
+	}
+
 	ctx := context.Background()
 
-	result, err := s.StudentRepo.GetAll(ctx) 
-	if err != nil {
-		log.Printf("ERROR: StudentRepo GetAll failed: %v", err) 
-		return c.Status(500).JSON(fiber.Map{"error": "Failed fetching students"})
+	if err := s.StudentRepo.UpdateAdvisorID(ctx, studentID, advisorID); err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": "Failed to update advisor"})
 	}
-	
-	return c.JSON(result) 
-}
 
-
-// ===============================================
-// Implementasi METHOD LAIN (yang hilang di routes.go)
-// ===============================================
-
-// GetAchievements (GET /students/:id/achievements)
-func (s *StudentService) GetAchievements(c *fiber.Ctx) error {
-	studentID := c.Params("id")
-	// Logika: 1. Cek keberadaan studentID, 2. Ambil list achievement references dari PostgreSQL, 
-	// 3. Ambil detail achievement dari MongoDB.
-	return c.Status(501).JSON(fiber.Map{"message": "GetAchievements not yet implemented for ID: " + studentID})
-}
-
-
-// SetAdvisor (PUT /students/:id/advisor) - Hanya Admin/manageUser
-func (s *StudentService) SetAdvisor(c *fiber.Ctx) error {
-    studentID := c.Params("id") // ID profil students
-
-    var req struct {
-        AdvisorID string `json:"advisor_id"`
-    }
-
-    if err := c.BodyParser(&req); err != nil {
-        return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid request body"})
-    }
-
-    // 1. Validasi ID yang di-request
-    // Jika req.AdvisorID kosong, kita set ke NULL di database.
-    var advisorIDToSet sql.NullString
-    if req.AdvisorID != "" {
-        // Cek apakah ID Dosen Wali adalah UUID yang valid
-        // (Contoh validasi sederhana: memastikan panjang)
-        if len(req.AdvisorID) != 36 {
-             return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid Advisor UUID format"})
-        }
-        advisorIDToSet.String = req.AdvisorID
-        advisorIDToSet.Valid = true
-    } else {
-        advisorIDToSet.Valid = false // Set ke NULL
-    }
-    
-    ctx := context.Background()
-
-    // 2. Panggil Repository untuk melakukan UPDATE
-    err := s.StudentRepo.UpdateAdvisorID(ctx, studentID, advisorIDToSet) 
-    if err != nil {
-        // Jika terjadi error, kemungkinan: Student ID tidak ditemukan atau Foreign Key (AdvisorID) tidak valid
-        log.Printf("ERROR: Failed to update advisor for student %s: %v", studentID, err)
-        return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to update advisor ID. Check if Student ID or Advisor ID is valid."})
-    }
-
-    return c.Status(fiber.StatusOK).JSON(fiber.Map{
-        "message": "Student advisor updated successfully",
-        "student_id": studentID,
-        "new_advisor_id": advisorIDToSet.String,
-    })
+	return c.JSON(fiber.Map{"message": "Student advisor updated successfully"})
 }

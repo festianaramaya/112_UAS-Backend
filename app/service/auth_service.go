@@ -11,8 +11,9 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
+// AuthService handles authentication logic
 type AuthService struct {
-	UserRepo *repository.UserRepository
+	UserRepo  *repository.UserRepository
 	JWTSecret string
 }
 
@@ -23,6 +24,18 @@ func NewAuthService(userRepo *repository.UserRepository, secret string) *AuthSer
 	}
 }
 
+// Login godoc
+// @Summary      User Login
+// @Description  Masuk ke sistem menggunakan username dan password untuk mendapatkan token JWT
+// @Tags         Auth
+// @Accept       json
+// @Produce      json
+// @Param        request  body      object{username=string,password=string}  true  "User Credentials"
+// @Success      200      {object}  map[string]interface{} "Berhasil login dan mendapatkan token"
+// @Failure      400      {object}  map[string]string      "Request tidak valid"
+// @Failure      401      {object}  map[string]string      "Username atau password salah"
+// @Failure      500      {object}  map[string]string      "Kesalahan server"
+// @Router       /api/v1/auth/login [post]
 func (s *AuthService) Login(c *fiber.Ctx) error {
 	var req struct {
 		Username string `json:"username"`
@@ -100,10 +113,28 @@ func (s *AuthService) Refresh(c *fiber.Ctx) error {
 	return c.Status(501).JSON(fiber.Map{"message": "Refresh endpoint not implemented"})
 }
 
+// Logout godoc
+// @Summary      User Logout
+// @Description  Keluar dari sistem dan menghapus sesi token
+// @Tags         Auth
+// @Accept       json
+// @Produce      json
+// @Success      200      {object}  map[string]string "Berhasil logout"
+// @Security     BearerAuth
+// @Router       /api/v1/auth/logout [post]
 func (s *AuthService) Logout(c *fiber.Ctx) error {
 	return c.Status(200).JSON(fiber.Map{"message": "Logout successful"})
 }
 
+// GetProfile godoc
+// @Summary      Get User Profile
+// @Description  Mengambil data profil user yang sedang login berdasarkan token
+// @Tags         Auth
+// @Accept       json
+// @Produce      json
+// @Success      200      {object}  map[string]interface{}
+// @Security     BearerAuth
+// @Router       /api/v1/auth/profile [get]
 func (s *AuthService) GetProfile(c *fiber.Ctx) error {
 	// Di sini Anda akan membaca token JWT dari context dan mengembalikan data user.
 	return c.Status(200).JSON(fiber.Map{"message": "Profile data fetched successfully"})

@@ -2,11 +2,12 @@ package service
 
 import (
 	"database/sql"
-    "uas/app/repository"
-    "uas/utils" // FIX: Tambahkan import utils
-    "uas/app/model" // FIX: Tambahkan import model
-    
-    "github.com/gofiber/fiber/v2"
+
+	"uas/app/model"
+	"uas/app/repository"
+	"uas/utils"
+
+	"github.com/gofiber/fiber/v2"
 )
 
 type UserService struct {
@@ -17,38 +18,55 @@ func NewUserService(repo *repository.UserRepository) *UserService {
 	return &UserService{repo: repo}
 }
 
+// Create godoc
+// @Summary Create new user
+// @Description Create a new user (Admin only)
+// @Tags Users
+// @Security BearerAuth
+// @Accept json
+// @Produce json
+// @Param request body model.CreateUserRequest true "Create User Request"
+// @Success 201 {object} map[string]string
+// @Failure 400 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /api/v1/users [post]
 func (s *UserService) Create(c *fiber.Ctx) error {
-    var req model.CreateUserRequest
-    if err := c.BodyParser(&req); err != nil {
-        return c.Status(400).JSON(fiber.Map{"error": "Invalid request"})
-    }
+	var req model.CreateUserRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(400).JSON(fiber.Map{"error": "Invalid request"})
+	}
 
-    // 1. HASH PASSWORD
-    passwordHash, err := utils.HashPassword(req.Password)
-    if err != nil {
-        return c.Status(500).JSON(fiber.Map{"error": "Failed to hash password"})
-    }
+	passwordHash, err := utils.HashPassword(req.Password)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": "Failed to hash password"})
+	}
 
-    // 2. Map ke Model User
-    user := model.User{
-        Username:     req.Username,
-        Email:        req.Email,
-        PasswordHash: passwordHash, 
-        FullName:     req.FullName,
-        RoleID:       req.RoleID,
-        IsActive:     true,
-    }
+	user := model.User{
+		Username:     req.Username,
+		Email:        req.Email,
+		PasswordHash: passwordHash,
+		FullName:     req.FullName,
+		RoleID:       req.RoleID,
+		IsActive:     true,
+	}
 
-    // 3. Kirim ke Repository (Membutuhkan s.repo.Create)
-    if err := s.repo.Create(&user); err != nil { // ERROR s.repo.Create akan hilang setelah Langkah 2
-        return c.Status(500).JSON(fiber.Map{"error": "Failed to create user"})
-    }
+	if err := s.repo.Create(&user); err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": "Failed to create user"})
+	}
 
-    return c.Status(201).JSON(fiber.Map{"message": "User created successfully"})
+	return c.Status(201).JSON(fiber.Map{"message": "User created successfully"})
 }
 
+// GetAll godoc
+// @Summary Get all users
+// @Description Get list of all users
+// @Tags Users
+// @Security BearerAuth
+// @Produce json
+// @Success 200 {array} model.User
+// @Failure 500 {object} map[string]string
+// @Router /api/v1/users [get]
 func (s *UserService) GetAll(c *fiber.Ctx) error {
-    // ... (kode ini sudah benar)
 	users, err := s.repo.GetAll()
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{"error": "Failed to fetch users"})
@@ -57,16 +75,21 @@ func (s *UserService) GetAll(c *fiber.Ctx) error {
 	return c.JSON(users)
 }
 
-// GetDetail - ID user adalah UUID (string), bukan integer
+// GetDetail godoc
+// @Summary Get user detail
+// @Description Get detail of user by ID
+// @Tags Users
+// @Security BearerAuth
+// @Produce json
+// @Param id path string true "User ID (UUID)"
+// @Success 200 {object} model.User
+// @Failure 404 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /api/v1/users/{id} [get]
 func (s *UserService) GetDetail(c *fiber.Ctx) error {
-	idParam := c.Params("id") // ID user adalah string (UUID)
+	id := c.Params("id")
 
-	// FIX: Hapus konversi ke int (strconv.Atoi)
-	// id, err := strconv.Atoi(idParam) <-- HAPUS BARIS INI
-	// if err != nil { ... }
-
-	user, err := s.repo.GetUserByID(idParam) // Langsung gunakan idParam (string)
-	
+	user, err := s.repo.GetUserByID(id)
 	if err == sql.ErrNoRows {
 		return c.Status(404).JSON(fiber.Map{"error": "User not found"})
 	}
@@ -77,50 +100,63 @@ func (s *UserService) GetDetail(c *fiber.Ctx) error {
 	return c.JSON(user)
 }
 
-func (s *UserService) Update(c *fiber.Ctx) error {
-	return c.Status(501).JSON(fiber.Map{"message": "User Update (Admin) not implemented"})
-}
-
+// AssignRole godoc
+// @Summary Assign role to user
+// @Description Assign role to a user
+// @Tags Users
+// @Security BearerAuth
+// @Accept json
+// @Produce json
+// @Param id path string true "User ID"
+// @Param request body object{role_id=string} true "Role ID"
+// @Success 200 {object} map[string]string
+// @Failure 400 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /api/v1/users/{id}/role [put]
 func (s *UserService) AssignRole(c *fiber.Ctx) error {
-    // Memerlukan role_id dan id user dari parameter URL
-    userID := c.Params("id") 
+	userID := c.Params("id")
 
-    var req struct {
-        RoleID string `json:"role_id"`
-    }
+	var req struct {
+		RoleID string `json:"role_id"`
+	}
 
-    if err := c.BodyParser(&req); err != nil {
-        return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid request body"})
-    }
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(400).JSON(fiber.Map{"error": "Invalid request body"})
+	}
 
-    // 1. Validasi RoleID (Opsional: Pastikan RoleID ada di tabel roles)
-    // Logika ini bisa ditambahkan di sini atau di repository.
+	if err := s.repo.UpdateRole(userID, req.RoleID); err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": "Failed to update user role"})
+	}
 
-    // 2. Update role di repository
-    if err := s.repo.UpdateRole(userID, req.RoleID); err != nil {
-        // Asumsi error spesifik untuk not found ditangkap di repository
-        return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to update user role"})
-    }
-
-    return c.Status(fiber.StatusOK).JSON(fiber.Map{"message": "User role assigned successfully"})
+	return c.JSON(fiber.Map{"message": "User role assigned successfully"})
 }
 
-// Delete (DELETE /api/v1/users/:id) - Melakukan Soft Delete
+// Delete godoc
+// @Summary Delete user (soft delete)
+// @Description Soft delete user by ID
+// @Tags Users
+// @Security BearerAuth
+// @Produce json
+// @Param id path string true "User ID"
+// @Success 200 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /api/v1/users/{id} [delete]
 func (s *UserService) Delete(c *fiber.Ctx) error {
-    userID := c.Params("id") // Ambil ID dari parameter URL
+	userID := c.Params("id")
 
-    // 1. Panggil Repository untuk melakukan Soft Delete
-    if err := s.repo.SoftDelete(userID); err != nil {
-        
-        // 2. Tangani error spesifik jika user tidak ditemukan/sudah dihapus
-        if err.Error() == "user not found or already deleted" {
-             return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "User not found or already deleted"})
-        }
-        
-        // 3. Tangani error database umum
-        return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to delete user"})
-    }
+	if err := s.repo.SoftDelete(userID); err != nil {
+		if err.Error() == "user not found or already deleted" {
+			return c.Status(404).JSON(fiber.Map{"error": "User not found"})
+		}
+		return c.Status(500).JSON(fiber.Map{"error": "Failed to delete user"})
+	}
 
-    // 4. Kembalikan status sukses
-    return c.Status(fiber.StatusOK).JSON(fiber.Map{"message": "User deleted successfully (soft delete)"})
+	return c.JSON(fiber.Map{"message": "User deleted successfully"})
+}
+
+func (s *UserService) Update(c *fiber.Ctx) error {
+	return c.Status(fiber.StatusNotImplemented).JSON(fiber.Map{
+		"message": "User update not implemented yet",
+	})
 }

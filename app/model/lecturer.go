@@ -9,3 +9,4 @@ type Lecturer struct {
 	Department string    `json:"department"`
 	CreatedAt  time.Time `json:"created_at"`
 }
+

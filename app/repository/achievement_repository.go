@@ -36,25 +36,32 @@ func (r *AchievementRepository) Create(ref *model.AchievementReference) error {
 }
 
 
-/* ================= GET ================= */
-
-func (r *AchievementRepository) GetByID(
+func (r *AchievementRepository) GetByStudentID(
 	ctx context.Context,
-	id uuid.UUID,
-) (model.AchievementReference, error) {
+	studentID uuid.UUID,
+) ([]model.AchievementReference, error) {
 
-	var ref model.AchievementReference
+	var results []model.AchievementReference
 
 	query := `
-		SELECT id, student_id, mongo_achievement_id, status,
-		       submitted_at, verified_at, verified_by,
-		       rejection_note, created_at, updated_at
+		SELECT
+			id,
+			student_id,
+			mongo_achievement_id,
+			status,
+			created_at,
+			updated_at
 		FROM achievement_references
-		WHERE id = $1
+		WHERE student_id = $1
+		ORDER BY created_at DESC
 	`
 
-	err := r.DB.GetContext(ctx, &ref, query, id)
-	return ref, err
+	err := r.DB.SelectContext(ctx, &results, query, studentID)
+	if err != nil {
+		return nil, err
+	}
+
+	return results, nil
 }
 
 func (r *AchievementRepository) GetAll(
@@ -77,32 +84,44 @@ func (r *AchievementRepository) GetAll(
 /* ================= UPDATE ================= */
 
 func (r *AchievementRepository) UpdateStatus(
-	ctx context.Context,
-	id uuid.UUID,
-	status string,
-	verifiedBy sql.NullString,
-	rejectionNote sql.NullString,
+    ctx context.Context,
+    id uuid.UUID,
+    status string,
+    verifiedBy sql.NullString,
+    rejectionNote sql.NullString,
 ) error {
+    // Gunakan transaksi agar kedua update sukses atau gagal bersamaan
+    tx, err := r.DB.BeginTxx(ctx, nil)
+    if err != nil {
+        return err
+    }
+    defer tx.Rollback()
 
-	query := `
-		UPDATE achievement_references
-		SET status = $2,
-		    verified_by = $3,
-		    rejection_note = $4,
-		    updated_at = NOW()
-		WHERE id = $1
-	`
+    // 1. Update status di tabel utama
+    queryUpdate := `
+        UPDATE achievement_references
+        SET status = $2, verified_by = $3, rejection_note = $4, updated_at = NOW()
+        WHERE id = $1`
+    
+    if _, err := tx.ExecContext(ctx, queryUpdate, id, status, verifiedBy, rejectionNote); err != nil {
+        return err
+    }
 
-	_, err := r.DB.ExecContext(
-		ctx,
-		query,
-		id,
-		status,
-		verifiedBy,
-		rejectionNote,
-	)
+    // 2. CATAT KE RIWAYAT (Agar tidak null saat di-GET)
+    queryHistory := `
+        INSERT INTO achievement_status_histories (achievement_id, status, note, updated_at)
+        VALUES ($1, $2, $3, NOW())`
+    
+    note := ""
+    if rejectionNote.Valid {
+        note = rejectionNote.String
+    }
 
-	return err
+    if _, err := tx.ExecContext(ctx, queryHistory, id, status, note); err != nil {
+        return err
+    }
+
+    return tx.Commit()
 }
 
 func (r *AchievementRepository) UpdateTimestamp(
@@ -261,4 +280,46 @@ func (r *AchievementRepository) GetStatusHistory(
 	}
 
 	return history, nil
+}
+
+func (r *AchievementRepository) GetByLecturerID(
+	ctx context.Context,
+	lecturerID uuid.UUID,
+) ([]model.AchievementReference, error) {
+
+	var results []model.AchievementReference
+
+	// Menggunakan JOIN untuk menghubungkan tabel prestasi dengan tabel mahasiswa
+	// agar kita bisa memfilter berdasarkan advisor_id (dosen pembimbing)
+	query := `
+		SELECT 
+			ar.id, 
+			ar.student_id, 
+			ar.mongo_achievement_id, 
+			ar.status, 
+			ar.created_at, 
+			ar.updated_at
+		FROM achievement_references ar
+		JOIN students s ON ar.student_id = s.id
+		WHERE s.advisor_id = $1
+		ORDER BY ar.created_at DESC
+	`
+
+	err := r.DB.SelectContext(ctx, &results, query, lecturerID)
+	if err != nil {
+		return nil, err
+	}
+
+	return results, nil
+}
+
+func (r *AchievementRepository) GetByID(ctx context.Context, id uuid.UUID) (*model.AchievementReference, error) {
+    var result model.AchievementReference
+    query := `SELECT * FROM achievement_references WHERE id = $1`
+    
+    err := r.DB.GetContext(ctx, &result, query, id)
+    if err != nil {
+        return nil, err
+    }
+    return &result, nil
 }

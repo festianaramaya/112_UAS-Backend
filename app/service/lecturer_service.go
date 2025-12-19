@@ -8,16 +8,17 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 
-	"uas/app/model"
 	"uas/app/repository"
 )
 
 type LecturerService struct {
-	MongoAchieveRepo *repository.MongoAchievementRepository
-	LecturerRepo     *repository.LecturerRepository
+	AchievementRepo *repository.AchievementRepository
+	LecturerRepo    *repository.LecturerRepository
 }
 
+// =========================
 // helper parse UUID
+// =========================
 func parseUUIDParam(c *fiber.Ctx) (uuid.UUID, error) {
 	idStr := c.Params("id")
 	if idStr == "" {
@@ -32,7 +33,19 @@ func parseUUIDParam(c *fiber.Ctx) (uuid.UUID, error) {
 	return id, nil
 }
 
-// GET ALL lecturers
+// =========================
+// GET /lecturers
+// =========================
+// GetAll godoc
+// @Summary      Get all lecturers
+// @Description  Mengambil semua daftar dosen yang ada di sistem
+// @Tags         Lecturer
+// @Accept       json
+// @Produce      json
+// @Success      200      {object}  map[string]interface{}
+// @Failure      500      {object}  map[string]interface{}
+// @Router       /api/v1/lecturers [get]
+// @Security     BearerAuth
 func (s *LecturerService) GetAll(c *fiber.Ctx) error {
 	lecturers, err := s.LecturerRepo.GetAll()
 	if err != nil {
@@ -48,7 +61,18 @@ func (s *LecturerService) GetAll(c *fiber.Ctx) error {
 	})
 }
 
-// GET advisee achievements (MONGO)
+// GetAdvisees godoc
+// @Summary      Get list of advisee achievements
+// @Description  Melihat daftar prestasi mahasiswa bimbingan (FR-006)
+// @Tags         Lecturer
+// @Accept       json
+// @Produce      json
+// @Param        id   path      string  true  "Lecturer ID (UUID)"
+// @Success      200  {object}  map[string]interface{}
+// @Failure      400  {object}  map[string]interface{}
+// @Failure      500  {object}  map[string]interface{}
+// @Router       /api/v1/lecturers/{id}/advisees [get]
+// @Security     BearerAuth
 func (s *LecturerService) GetAdvisees(c *fiber.Ctx) error {
 	lecturerID, err := parseUUIDParam(c)
 	if err != nil {
@@ -59,18 +83,18 @@ func (s *LecturerService) GetAdvisees(c *fiber.Ctx) error {
 
 	ctx := context.Background()
 
-	results, err := s.MongoAchieveRepo.GetAdviseeAchievements(ctx, lecturerID)
+	results, err := s.AchievementRepo.GetByLecturerID(ctx, lecturerID)
 	if err != nil {
-		log.Println("Mongo GetAdvisees error:", err)
+		log.Println("GetAdvisees error:", err)
 		return c.Status(500).JSON(fiber.Map{
-			"error": err.Error(),
+			"error": "Failed to fetch advisee achievements",
 		})
 	}
 
 	if len(results) == 0 {
 		return c.JSON(fiber.Map{
 			"message": "No advisee achievements found",
-			"data":    []model.AchievementFull{},
+			"data":    []any{},
 			"total":   0,
 		})
 	}
@@ -82,13 +106,15 @@ func (s *LecturerService) GetAdvisees(c *fiber.Ctx) error {
 	})
 }
 
-// constructor (MONGO VERSION)
+// =========================
+// CONSTRUCTOR
+// =========================
 func NewLecturerService(
-	mongoAchieveRepo *repository.MongoAchievementRepository,
+	achievementRepo *repository.AchievementRepository,
 	lecturerRepo *repository.LecturerRepository,
 ) *LecturerService {
 	return &LecturerService{
-		MongoAchieveRepo: mongoAchieveRepo,
-		LecturerRepo:     lecturerRepo,
+		AchievementRepo: achievementRepo,
+		LecturerRepo:    lecturerRepo,
 	}
 }
